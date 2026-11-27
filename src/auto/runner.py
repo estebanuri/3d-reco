@@ -1,9 +1,9 @@
 """runner.py - ColmapRunner: unified command builder and subprocess executor.
 
 Transparently wraps Docker or local COLMAP binary execution. Streams stdout/stderr
-to a per-step log file inside the workspace log directory. Command headers and
-progress are emitted via logging (console shows INFO by default, DEBUG with
---verbose). Full subprocess output always goes to the log file.
+to a unified pipeline log file inside the workspace log directory. Command headers
+and progress are emitted via logging (console shows INFO by default, DEBUG with
+--verbose). All subprocess output goes to the same pipeline.log.
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ class ColmapRunner:
 
         Command header and progress are emitted via logging so they appear on
         the console at INFO level (default) or DEBUG level with --verbose.
-        Full subprocess stdout/stderr always goes to the step log file.
+        Full subprocess stdout/stderr always goes to the unified pipeline log file.
 
         Args:
             command_parts: Command and arguments as an iterable of strings.
@@ -179,14 +179,14 @@ class ColmapRunner:
         Args:
             subcommand: COLMAP subcommand name.
             *args: Arguments for the subcommand.
-            log_name: Optional per-step log file name (defaults to pipeline.log).
+            log_name: Optional log file name (defaults to pipeline.log).
             check: If True, raise on non-zero exit.
 
         Returns:
             Process return code.
         """
         cmd = self.build_command(subcommand, *args)
-        step_log = log_name or f"{subcommand}.log"
+        step_log = log_name or "pipeline.log"
         return self.run(cmd, log_name=step_log, check=check)
 
     def __enter__(self) -> ColmapRunner:
