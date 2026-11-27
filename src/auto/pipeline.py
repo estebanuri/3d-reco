@@ -55,9 +55,9 @@ class SfMPipeline:
             "--ImageReader.single_camera", str(int(single_camera)),
         ]
         if sift_use_gpu is not None:
-            args.extend(["--SiftExtraction.use_gpu", str(int(sift_use_gpu))])
+            args.extend(["--FeatureExtraction.use_gpu", str(int(sift_use_gpu))])
         elif not self.runner.config.use_gpu:
-            args.extend(["--SiftExtraction.use_gpu", "0"])
+            args.extend(["--FeatureExtraction.use_gpu", "0"])
 
         self.runner.run_colmap("feature_extractor", *args)
 
@@ -65,9 +65,9 @@ class SfMPipeline:
         """Run COLMAP exhaustive_matcher (all-pairs matching)."""
         args = ["--database_path", str(self.database_path)]
         if use_gpu is not None:
-            args.extend(["--SiftMatching.use_gpu", str(int(use_gpu))])
+            args.extend(["--FeatureMatching.use_gpu", str(int(use_gpu))])
         elif not self.runner.config.use_gpu:
-            args.extend(["--SiftMatching.use_gpu", "0"])
+            args.extend(["--FeatureMatching.use_gpu", "0"])
 
         self.runner.run_colmap("exhaustive_matcher", *args)
 
@@ -75,9 +75,9 @@ class SfMPipeline:
         """Run COLMAP sequential_matcher (sequential matching)."""
         args = ["--database_path", str(self.database_path)]
         if use_gpu is not None:
-            args.extend(["--SiftMatching.use_gpu", str(int(use_gpu))])
+            args.extend(["--FeatureMatching.use_gpu", str(int(use_gpu))])
         elif not self.runner.config.use_gpu:
-            args.extend(["--SiftMatching.use_gpu", "0"])
+            args.extend(["--FeatureMatching.use_gpu", "0"])
 
         self.runner.run_colmap("sequential_matcher", *args)
 
@@ -156,7 +156,7 @@ class SfMPipeline:
             "patch_match_stereo",
             "--workspace_path", str(self.dense_dir),
             "--workspace_format", "COLMAP",
-            "--PatchMatchStereo.use_gpu", str(int(self.runner.config.use_gpu)),
+            "--PatchMatchStereo.gpu_index", str(0 if self.runner.config.use_gpu else -1),
         )
 
         # Step 3: stereo_fusion
