@@ -19,6 +19,30 @@ from src.auto.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# Human-readable description for each COLMAP subcommand.
+_SUBCOMMAND_DESCRIPTIONS: dict[str, str] = {
+    "feature_extractor": "Extracting features",
+    "exhaustive_matcher": "Matching features (exhaustive)",
+    "vocabulary_tree_matcher": "Matching features (vocabulary tree)",
+    "spatial_matcher": "Matching features (spatial verification)",
+    "mapper": "Running sparse reconstruction (Mapper)",
+    "model_converter": "Converting model",
+    "bundle_adjuster": "Running bundle adjustment",
+    "image_undistorter": "Undistorting images",
+    "patch_match_stereo": "Running Patch-Match Stereo",
+    "stereo_fusion": "Fusing stereo depth maps",
+    "poisson_mesher": "Meshing (Poisson)",
+    "delaunay_mesher": "Meshing (Delaunay)",
+    "meshing_texturing": "Texturing mesh",
+    "convert_model": "Converting model format",
+}
+
+
+def _subcommand_description(subcommand: str) -> str:
+    """Return a human-readable label for a COLMAP subcommand."""
+    return _SUBCOMMAND_DESCRIPTIONS.get(subcommand, subcommand)
+
+
 
 class ColmapRunner:
     """Builds and executes COLMAP commands via Docker or local binary.
@@ -187,6 +211,8 @@ class ColmapRunner:
         """
         cmd = self.build_command(subcommand, *args)
         step_log = log_name or "pipeline.log"
+        desc = _subcommand_description(subcommand)
+        logger.info("%s ( %s )", desc, subcommand)
         return self.run(cmd, log_name=step_log, check=check)
 
     def __enter__(self) -> ColmapRunner:
