@@ -1,7 +1,9 @@
 """runner.py - ColmapRunner: unified command builder and subprocess executor.
 
 Transparently wraps Docker or local COLMAP binary execution. Streams stdout/stderr
-in real time to both the console and a log file inside the workspace log directory.
+to a per-step log file inside the workspace log directory. Command headers and
+progress are emitted via logging (console shows INFO by default, DEBUG with
+--verbose). Full subprocess output always goes to the log file.
 """
 
 from __future__ import annotations
@@ -12,6 +14,10 @@ from pathlib import Path
 from typing import Iterable, TextIO
 
 from src.auto.config import AppConfig
+from src.auto.logging_config import get_logger
+
+
+logger = get_logger(__name__)
 
 
 class ColmapRunner:
@@ -102,7 +108,11 @@ class ColmapRunner:
         log_name: str = "pipeline.log",
         check: bool = True,
     ) -> int:
-        """Execute a command, streaming stdout/stderr to console and log file.
+        """Execute a command, streaming stdout/stderr to the log file.
+
+        Command header and progress are emitted via logging so they appear on
+        the console at INFO level (default) or DEBUG level with --verbose.
+        Full subprocess stdout/stderr always goes to the step log file.
 
         Args:
             command_parts: Command and arguments as an iterable of strings.
@@ -118,9 +128,10 @@ class ColmapRunner:
         cmd = list(command_parts)
         log_file = self._open_log(log_name)
 
-        # Write command header to log
+        # Write command header to the step log file (always) and to the
+        # console via logging at INFO level (visible by default).
         header = f"\n{'=' * 70}\n$ {' '.join(cmd)}\n{'=' * 70}\n"
-        print(header, end="")
+        logger.info("Running: %s", " ".join(cmd))
         log_file.write(header)
         log_file.flush()
 
@@ -136,11 +147,15 @@ class ColmapRunner:
 
             assert proc.stdout is not None
             for line in proc.stdout:
-                print(line, end="")
+                # Full subprocess output always goes to the log file.
                 log_file.write(line)
                 log_file.flush()
+                # Only echo to console at DEBUG level (--verbose).
+                logger.debug(line.rstrip("\n"))
 
             return_code = proc.wait()
+
+            logger.info("Command finished with return code %d.", return_code)
 
             if return_code != 0 and check:
                 raise subprocess.CalledProcessError(return_code, cmd)

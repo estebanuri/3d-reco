@@ -6,10 +6,15 @@ COLMAP camera parameters tailored to this drone dataset.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from pathlib import Path
 
+from src.auto.logging_config import get_logger
 from src.prj.base import BaseProject
+
+
+logger = get_logger(__name__)
 
 
 class OdmBellusProject(BaseProject):
@@ -46,15 +51,15 @@ class OdmBellusProject(BaseProject):
         self.dataset_dir.parent.mkdir(parents=True, exist_ok=True)
 
         if self.dataset_dir.exists() and not force:
-            print(f"[odm_bellus] Dataset already present at {self.dataset_dir}")
+            logger.info("[odm_bellus] Dataset already present at %s", self.dataset_dir)
             return self.dataset_dir
 
         if self.dataset_dir.exists() and force:
-            print(f"[odm_bellus] Removing existing dataset at {self.dataset_dir}")
+            logger.info("[odm_bellus] Removing existing dataset at %s", self.dataset_dir)
             import shutil
             shutil.rmtree(self.dataset_dir)
 
-        print(f"[odm_bellus] Cloning {self.GIT_URL} -> {self.dataset_dir}")
+        logger.info("[odm_bellus] Cloning %s -> %s", self.GIT_URL, self.dataset_dir)
         subprocess.run(
             ["git", "clone", "--depth", "1", self.GIT_URL, str(self.dataset_dir)],
             check=True,
