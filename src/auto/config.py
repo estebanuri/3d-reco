@@ -110,19 +110,25 @@ class AppConfig(BaseModel):
         return env
 
     @classmethod
-    def load_from_env(cls, env_name: str = "local") -> AppConfig:
-        """Load configuration from .env.<env_name> file, then environment variables.
+    def load_from_env(cls) -> AppConfig:
+        """Load configuration from .env file at project root.
 
+        Raises FileNotFoundError if .env does not exist.
         CLI overrides are applied after construction by the caller.
         """
-        env_file = Path(__file__).resolve().parents[3] / f".env.{env_name}"
-        if env_file.exists():
-            load_dotenv(env_file, override=False)
-        else:
-            # Fall back to generic .env
-            generic_env = Path(__file__).resolve().parents[3] / ".env"
-            if generic_env.exists():
-                load_dotenv(generic_env, override=False)
+        project_root = Path(__file__).resolve().parents[3]
+        env_file = project_root / ".env"
+
+        if not env_file.exists():
+            example_file = project_root / ".env.example"
+            raise FileNotFoundError(
+                f"Configuration file '{env_file}' not found.\n"
+                "Please copy .env.example to .env and edit it with your settings:\n"
+                f"    cp {example_file} {env_file}\n"
+                f"    # then edit {env_file} with your SCRATCH_DIR, COLMAP_MODE, etc."
+            )
+
+        load_dotenv(env_file, override=False)
 
         # Load from system environment (already set or from .env above)
         execution_mode = os.getenv("COLMAP_MODE", "local")

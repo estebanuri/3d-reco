@@ -29,12 +29,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "(Docker on university server, local binary for dev).",
     )
     parser.add_argument(
-        "--env",
-        default="local",
-        choices=["local", "remote"],
-        help="Environment profile: selects .env.<env> file (default: local).",
-    )
-    parser.add_argument(
         "--project",
         default="odm_bellus",
         choices=list(PROJECT_REGISTRY.keys()),
@@ -92,8 +86,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    # 1. Load configuration from .env.<env>
-    config = AppConfig.load_from_env(env_name=args.env)
+    # 1. Load configuration from .env
+    try:
+        config = AppConfig.load_from_env()
+    except FileNotFoundError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        return 1
 
     # 2. Apply CLI overrides
     override_kwargs: dict = {}
