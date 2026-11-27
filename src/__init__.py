@@ -1,0 +1,1 @@
+"""COLMAP Automatizer - Automated COLMAP execution pipeline."""

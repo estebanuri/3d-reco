@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+lib/
+lib64/
+sdist/
+var/
+wheels/
+share/
+python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+.venv/
+
+# Environment files (local overrides)
+env/.env.local
+env/.env.remote
+
+# Scratch directory (data, logs, outputs - never commit)
+scratch/
+/scratch/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
