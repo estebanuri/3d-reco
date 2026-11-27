@@ -54,13 +54,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--use-gpu",
         dest="use_gpu",
         action="store_true",
-        default=True,
-        help="Enable GPU acceleration (default: True).",
+        default=None,
+        help="Enable GPU acceleration.",
     )
     parser.add_argument(
         "--no-use-gpu",
         dest="use_gpu",
         action="store_false",
+        default=None,
         help="Disable GPU acceleration (CPU-only).",
     )
     parser.add_argument(
