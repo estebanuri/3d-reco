@@ -116,7 +116,7 @@ class AppConfig(BaseModel):
         Raises FileNotFoundError if .env does not exist.
         CLI overrides are applied after construction by the caller.
         """
-        project_root = Path(__file__).resolve().parents[3]
+        project_root = Path(__file__).resolve().parents[2]
         env_file = project_root / ".env"
 
         if not env_file.exists():

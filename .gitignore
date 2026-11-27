@@ -33,6 +33,7 @@ env/
 # Environment files (local overrides)
 env/.env.local
 env/.env.remote
+.env
 
 # Scratch directory (data, logs, outputs - never commit)
 scratch/
