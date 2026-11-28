@@ -10,8 +10,15 @@ from __future__ import annotations
 
 import os
 import subprocess
+import threading
+import time
 from pathlib import Path
 from typing import Iterable, TextIO
+
+# Interval (seconds) between real-time progress heartbeat messages while a
+# COLMAP subprocess is running. Keeps the terminal from appearing frozen
+# during long stages (e.g., mapper, patch_match_stereo).
+_HEARTBEAT_INTERVAL = 20
 
 from src.auto.config import AppConfig
 from src.auto.logging_config import get_logger
@@ -23,6 +30,7 @@ logger = get_logger(__name__)
 _SUBCOMMAND_DESCRIPTIONS: dict[str, str] = {
     "feature_extractor": "Extracting features",
     "exhaustive_matcher": "Matching features (exhaustive)",
+    "sequential_matcher": "Matching features (sequential)",
     "vocabulary_tree_matcher": "Matching features (vocabulary tree)",
     "spatial_matcher": "Matching features (spatial verification)",
     "mapper": "Running sparse reconstruction (Mapper)",
@@ -170,12 +178,36 @@ class ColmapRunner:
             )
 
             assert proc.stdout is not None
-            for line in proc.stdout:
-                # Full subprocess output always goes to the log file.
-                log_file.write(line)
-                log_file.flush()
-                # Only echo to console at DEBUG level (--verbose).
-                logger.debug(line.rstrip("\n"))
+
+            # Real-time progress heartbeat: keep the terminal alive during
+            # long-running stages that emit little/no stdout (e.g., mapper,
+            # patch_match_stereo). Runs independently of the blocking
+            # stdout-read loop below so progress is printed even while COLMAP
+            # is silent.
+            stop_heartbeat = threading.Event()
+
+            def _heartbeat() -> None:
+                start = time.monotonic()
+                cmd_str = " ".join(cmd)
+                while not stop_heartbeat.wait(_HEARTBEAT_INTERVAL):
+                    elapsed = int(time.monotonic() - start)
+                    logger.info(
+                        "Still running (%ds elapsed): %s", elapsed, cmd_str
+                    )
+
+            heartbeat_thread = threading.Thread(target=_heartbeat, daemon=True)
+            heartbeat_thread.start()
+
+            try:
+                for line in proc.stdout:
+                    # Full subprocess output always goes to the log file.
+                    log_file.write(line)
+                    log_file.flush()
+                    # Only echo to console at DEBUG level (--verbose).
+                    logger.debug(line.rstrip("\n"))
+            finally:
+                stop_heartbeat.set()
+                heartbeat_thread.join()
 
             return_code = proc.wait()
 

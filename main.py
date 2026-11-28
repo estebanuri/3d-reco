@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     # Console shows progress milestones by default; everything when --verbose.
-    console_level = args.log_level if args.verbose else "INFO"
+    console_level = "DEBUG" if args.verbose else "INFO"
 
     # Set up console logging immediately so early errors are visible
     # even if config loading fails.

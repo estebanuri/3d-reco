@@ -122,13 +122,15 @@ class SfMPipeline:
             )
 
         # Convert binary -> PLY (for visualization / Gaussian Splatting)
+        # COLMAP model_converter --output_type PLY expects --output_path to be a
+        # target file path (e.g., sparse.ply), NOT a directory. Passing a
+        # directory triggers SIGABRT ("Could not open ... Is the path a directory").
         if output_format in ("PLY", "BOTH"):
-            ply_dir = sparse_dir.parent / "sparse_ply"
-            ply_dir.mkdir(parents=True, exist_ok=True)
+            ply_file = sparse_dir.parent / "sparse.ply"
             self.runner.run_colmap(
                 "model_converter",
                 "--input_path", str(sparse_dir),
-                "--output_path", str(ply_dir),
+                "--output_path", str(ply_file),
                 "--output_type", "PLY",
             )
 
@@ -216,7 +218,7 @@ class SfMPipeline:
             "database": self.database_path,
             "sparse_bin": self.sparse_dir / "0",
             "sparse_txt": self.sparse_dir.parent / "sparse_txt",
-            "sparse_ply": self.sparse_dir.parent / "sparse_ply",
+            "sparse_ply": self.sparse_dir.parent / "sparse.ply",
         }
 
         # 5. Optional dense MVS
