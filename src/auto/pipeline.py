@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.auto.logging_config import get_logger
 from src.auto.runner import ColmapRunner
+
+logger = get_logger(__name__)
 
 
 class SfMPipeline:
@@ -37,6 +40,40 @@ class SfMPipeline:
         self.database_path = self.workspace_dir / "database.db"
         self.sparse_dir = self.workspace_dir / "sparse"
         self.dense_dir = self.workspace_dir / "dense"
+
+        # Hidden marker files written upon successful completion of each stage.
+        # Used for step-level skipping when resuming an existing workspace.
+        self._markers: dict[str, str] = {
+            "extract": ".done_extract",
+            "match": ".done_match",
+            "mapper": ".done_mapper",
+            "convert": ".done_convert",
+            "dense": ".done_dense",
+        }
+
+    # ------------------------------------------------------------------ #
+    # Stage-marker helpers (skip/resume support)
+    # ------------------------------------------------------------------ #
+    def _marker_path(self, stage: str) -> Path:
+        """Return the hidden marker file path for a given stage."""
+        if stage not in self._markers:
+            raise ValueError(f"Unknown stage: {stage}. Expected one of {list(self._markers)}.")
+        return self.workspace_dir / self._markers[stage]
+
+    def _stage_done(self, stage: str) -> bool:
+        """Return True if the hidden marker file for a stage exists."""
+        return self._marker_path(stage).exists()
+
+    def _write_marker(self, stage: str) -> None:
+        """Touch the hidden marker file for a stage (mark it as completed)."""
+        self._marker_path(stage).touch(exist_ok=True)
+
+    def _clear_marker(self, stage: str) -> None:
+        """Remove the hidden marker file for a stage, if present."""
+        try:
+            self._marker_path(stage).unlink()
+        except FileNotFoundError:
+            pass
 
     # ------------------------------------------------------------------ #
     # Pipeline steps
@@ -193,26 +230,68 @@ class SfMPipeline:
         Returns:
             Dict of output path names to Path objects.
         """
+        # ------------------------------------------------------------------ #
+        # Interruption recovery: if database.db exists from an interrupted run
+        # but the extract/match stage markers are not both present, delete it
+        # so extraction + matching re-run from a clean state (avoids COLMAP
+        # appending duplicate features to a stale DB).
+        # ------------------------------------------------------------------ #
+        if self.database_path.exists() and not (
+            self._stage_done("extract") and self._stage_done("match")
+        ):
+            logger.info(
+                "database.db exists without completed extract/match markers; "
+                "removing it for a clean re-run."
+            )
+            self.database_path.unlink()
+            self._clear_marker("extract")
+            self._clear_marker("match")
+
         # 1. Feature extraction
-        self.feature_extractor(
-            camera_model=camera_model,
-            single_camera=single_camera,
-            sift_use_gpu=use_gpu,
-        )
+        if self._stage_done("extract") and self.database_path.exists():
+            logger.info("Skipping extract (already completed)")
+        else:
+            self.feature_extractor(
+                camera_model=camera_model,
+                single_camera=single_camera,
+                sift_use_gpu=use_gpu,
+            )
+            self._write_marker("extract")
 
         # 2. Matching
-        if matcher == "exhaustive":
-            self.exhaustive_matcher(use_gpu=use_gpu)
-        elif matcher == "sequential":
-            self.sequential_matcher(use_gpu=use_gpu)
+        if self._stage_done("match") and self.database_path.exists():
+            logger.info("Skipping match (already completed)")
         else:
-            raise ValueError(f"Unknown matcher: {matcher}. Use 'exhaustive' or 'sequential'.")
+            if matcher == "exhaustive":
+                self.exhaustive_matcher(use_gpu=use_gpu)
+            elif matcher == "sequential":
+                self.sequential_matcher(use_gpu=use_gpu)
+            else:
+                raise ValueError(
+                    f"Unknown matcher: {matcher}. Use 'exhaustive' or 'sequential'."
+                )
+            self._write_marker("match")
 
         # 3. Sparse reconstruction
-        sparse_0 = self.mapper()
+        sparse_0 = self.sparse_dir / "0"
+        mapper_done = self._stage_done("mapper") and (
+            sparse_0 / "points3D.bin"
+        ).exists()
+        if mapper_done:
+            logger.info("Skipping mapper (already completed)")
+        else:
+            sparse_0 = self.mapper()
+            self._write_marker("mapper")
 
         # 4. Convert to text and PLY
-        self.model_converter(sparse_dir=sparse_0, output_format="BOTH")
+        convert_done = self._stage_done("convert") and (
+            self.sparse_dir.parent / "sparse.ply"
+        ).exists()
+        if convert_done:
+            logger.info("Skipping convert (already completed)")
+        else:
+            self.model_converter(sparse_dir=sparse_0, output_format="BOTH")
+            self._write_marker("convert")
 
         outputs: dict[str, Path] = {
             "database": self.database_path,
@@ -223,7 +302,14 @@ class SfMPipeline:
 
         # 5. Optional dense MVS
         if dense:
-            self.dense_pipeline()
+            dense_done = self._stage_done("dense") and (
+                self.dense_dir / "fused.ply"
+            ).exists()
+            if dense_done:
+                logger.info("Skipping dense (already completed)")
+            else:
+                self.dense_pipeline()
+                self._write_marker("dense")
             outputs["dense_dir"] = self.dense_dir
             outputs["fused_ply"] = self.dense_dir / "fused.ply"
 

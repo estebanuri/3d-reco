@@ -12,6 +12,8 @@ import os
 import subprocess
 import threading
 import time
+from datetime import datetime
+
 from pathlib import Path
 from typing import Iterable, TextIO
 
@@ -64,19 +66,113 @@ class ColmapRunner:
         log_file: Open file handle for the main pipeline log.
     """
 
-    def __init__(self, config: AppConfig, project_name: str, timestamp: str):
+    def __init__(
+        self,
+        config: AppConfig,
+        project_name: str,
+        timestamp: str,
+        *,
+        workspace_dir: Path | None = None,
+        is_resuming: bool = False,
+    ):
         self.config = config
         self.project_name = project_name
         self.timestamp = timestamp
+        self.is_resuming = is_resuming
 
-        # Workspace: <scratch_dir>/workspaces/<project>_<timestamp>/
-        self.workspace_dir = (
-            config.scratch_dir.resolve() / "workspaces" / f"{project_name}_{timestamp}"
-        )
+        # Workspace: either an existing one to resume, or a fresh one.
+        if workspace_dir is not None:
+            self.workspace_dir = Path(workspace_dir).resolve()
+        else:
+            # Workspace: <scratch_dir>/workspaces/<project>_<timestamp>/
+            self.workspace_dir = (
+                config.scratch_dir.resolve() / "workspaces" / f"{project_name}_{timestamp}"
+            )
         self.log_dir = self.workspace_dir / "logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         self._log_file: TextIO | None = None
+
+    @classmethod
+    def resolve_workspace(
+        cls,
+        config: AppConfig,
+        project_name: str,
+        *,
+        resume: str | None = None,
+        is_new: bool = False,
+    ) -> tuple[Path, bool, str]:
+        """Resolve which workspace directory to use.
+
+        Supports three selection modes:
+          * ``--new``: always create a brand-new ``<project>_<timestamp>`` workspace.
+          * ``--resume <name_or_path>``: target a specific existing workspace to resume.
+            The value may be a directory name inside ``<scratch_dir>/workspaces/`` or a
+            full path. Raises :exc:`FileNotFoundError` if the target does not exist.
+          * Default (neither flag): search ``<scratch_dir>/workspaces/`` for the most
+            recent ``<project>_*`` directory and reuse it; if none exist, create a new
+            ``<project>_<timestamp>`` workspace.
+
+        Args:
+            config: AppConfig instance (provides scratch_dir).
+            project_name: Project identifier used for workspace naming.
+            resume: Name or path of an existing workspace to resume.
+            is_new: If True, always create a brand-new workspace.
+
+        Returns:
+            Tuple of (workspace_dir, is_resuming, timestamp). ``is_resuming`` is True
+            when reusing an existing workspace; ``timestamp`` is either parsed from an
+            existing workspace name or freshly minted.
+
+        Raises:
+            FileNotFoundError: if the ``--resume`` target does not exist or is not a
+                directory.
+        """
+        workspaces_root = config.scratch_dir.resolve() / "workspaces"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        if is_new:
+            # Brand-new workspace: <project>_<timestamp>
+            workspace_dir = workspaces_root / f"{project_name}_{timestamp}"
+            return workspace_dir, False, timestamp
+
+        if resume is not None:
+            # Explicit target: either a dir name inside workspaces/ or a full path.
+            candidate = Path(resume)
+            if not candidate.is_absolute():
+                candidate = workspaces_root / candidate
+            candidate = candidate.resolve()
+            if not candidate.is_dir():
+                raise FileNotFoundError(
+                    f"Workspace to resume not found: {candidate}\n"
+                    f"Expected a directory name inside {workspaces_root} or a full path "
+                    f"to an existing workspace directory."
+                )
+            # Parse the timestamp from the directory name if it matches <project>_<ts>.
+            name = candidate.name
+            if "_" in name:
+                ts_candidate = name.rsplit("_", 1)[-1]
+                if (
+                    len(ts_candidate) == 15
+                    and ts_candidate[:8].isdigit()
+                    and ts_candidate[9:].isdigit()
+                ):
+                    timestamp = ts_candidate
+            return candidate, True, timestamp
+
+        # Default: search for the most recent <project>_* workspace.
+        if workspaces_root.is_dir():
+            matches = sorted(
+                workspaces_root.glob(f"{project_name}_*"),
+                key=lambda p: p.name,
+            )
+            if matches:
+                latest = matches[-1]
+                return latest, True, timestamp
+
+        # None exist -> create new.
+        workspace_dir = workspaces_root / f"{project_name}_{timestamp}"
+        return workspace_dir, False, timestamp
 
     # ------------------------------------------------------------------ #
     # Command building

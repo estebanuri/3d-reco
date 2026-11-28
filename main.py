@@ -104,6 +104,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Logging verbosity level for the log file (default: INFO).",
     )
+    # Workspace selection mode: mutually exclusive flags.
+    resume_group = parser.add_mutually_exclusive_group(required=False)
+    resume_group.add_argument(
+        "--new",
+        action="store_true",
+        default=False,
+        help="Always create a brand-new <project_name>_<timestamp> workspace.",
+    )
+    resume_group.add_argument(
+        "--resume",
+        metavar="NAME_OR_PATH",
+        default=None,
+        help="Target a specific existing workspace to resume. Accepts a directory name "
+        "inside <scratch_dir>/workspaces/ or a full path.",
+    )
     return parser
 
 
@@ -183,9 +198,20 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("Scratch dir: %s", config.scratch_dir)
     logger.info("GPU: %s", config.use_gpu)
 
-    # 5. Set up runner and pipeline
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    runner = ColmapRunner(config, project.get_workspace_name(), timestamp)
+    # 5. Resolve workspace (new / resume / latest-default) and set up runner.
+    workspace_dir, is_resuming, timestamp = ColmapRunner.resolve_workspace(
+        config,
+        project.get_workspace_name(),
+        resume=args.resume,
+        is_new=args.new,
+    )
+    runner = ColmapRunner(
+        config,
+        project.get_workspace_name(),
+        timestamp,
+        workspace_dir=workspace_dir,
+        is_resuming=is_resuming,
+    )
 
     # Unify application logging into the same file the runner uses for
     # COLMAP subprocess output so there is a single log per workspace.
@@ -196,6 +222,8 @@ def main(argv: list[str] | None = None) -> int:
         console_level=console_level,
     )
     logger.info("Unified logging to %s", runner_log_path)
+    if is_resuming:
+        logger.info("Resuming existing workspace: %s", workspace_dir)
 
     pipeline = SfMPipeline(
         runner=runner,
